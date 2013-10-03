@@ -11,4 +11,4 @@ This code provides an example of how to communicate with Smartwatch+ and how to 
 * iPhone battery percentage
 * Next calendar appointment
 
-![SmartStatus watchapp](https://raw.github.com/robhh/SmartStatus-AppStore/master/SmartStatus.jpg)
+![SmartStatus watchapp](https://raw.github.com/tallerthenyou/SmartStatus-AppStore/simplicity/SmartStatus.jpg)
