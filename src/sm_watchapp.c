@@ -21,6 +21,7 @@ char* int_to_str(int num, char *outbuf);
 void sendCommand(int key);
 void sendCommandInt(int key, int param);
 void rcv(DictionaryIterator *received, void *context);
+void failed(DictionaryIterator *failed, AppMessageResult reason, void *context);
 void dropped(void *context, AppMessageResult reason);
 void battery_layer_update_callback(Layer *me, GContext* ctx);
 void handle_init(AppContextRef ctx);
@@ -54,7 +55,9 @@ static char calendar_date_str[STRING_LENGTH], calendar_text_str[STRING_LENGTH];
 HeapBitmap battery_image;
 HeapBitmap weather_status_imgs[NUM_WEATHER_IMAGES];
 
-static AppTimerHandle timer = 0;
+static AppTimerHandle timerUpdateCalendar = 0;
+static AppTimerHandle timerUpdateWeather = 0;
+static AppTimerHandle timerRetry = 0;
 
 const int WEATHER_IMG_IDS[] = {
   RESOURCE_ID_IMAGE_SUN,
@@ -78,6 +81,7 @@ AppMessageResult sm_message_out_get(DictionaryIterator **iter_out) {
     if(s_sequence_number == 0xFFFFFFFF) {
         s_sequence_number = 1;
     }
+
     return APP_MSG_OK;
 }
 
@@ -195,10 +199,52 @@ void rcv(DictionaryIterator *received, void *context) {
         calendar_text_str[strlen(t->value->cstring)] = '\0';
         text_layer_set_text(&calendar_text_layer, calendar_text_str);
     }
+
+    t=dict_find(received, SM_STATUS_UPD_WEATHER_KEY);
+    if (t!=NULL) {
+        int interval = t->value->int32 * 1000;
+
+        app_timer_cancel_event(g_app_context, timerUpdateWeather);
+        timerUpdateWeather = app_timer_send_event(g_app_context, interval /* milliseconds */, 1);
+    }
+
+    t=dict_find(received, SM_STATUS_UPD_CAL_KEY);
+    if (t!=NULL) {
+        int interval = t->value->int32 * 1000;
+
+        app_timer_cancel_event(g_app_context, timerUpdateCalendar);
+        timerUpdateCalendar = app_timer_send_event(g_app_context, interval /* milliseconds */, 2);
+    }
+}
+
+void failed(DictionaryIterator *failed, AppMessageResult reason, void *context) {
+    static char time_text[14];
+    char *time_format;
+
+    PblTm time;
+    get_time(&time);
+
+    if (clock_is_24h_style()) {
+      time_format = "%m/%d %H:%M";
+    } else {
+      time_format = "%m/%d %I:%M%p";
+    }
+
+    string_format_time(time_text, sizeof(time_text), time_format, &time);
+
+    if (!clock_is_24h_style() && (time_text[6] == '0')) {
+      memmove(time_text, &time_text[7], sizeof(time_text) - 1);
+    }
+
+    text_layer_set_text(&calendar_date_layer, time_text);
+    text_layer_set_text(&calendar_text_layer, "Failed to connect");
+
+    app_timer_cancel_event(g_app_context, timerRetry);
+    timerUpdateWeather = app_timer_send_event(g_app_context, 600000 /* milliseconds */, 3);
 }
 
 void dropped(void *context, AppMessageResult reason){
-    // DO SOMETHING WITH THE DROPPED REASON / DISPLAY AN ERROR / RESEND
+     // DO SOMETHING WITH THE DROPPED REASON / DISPLAY AN ERROR / RESEND
 }
 
 void battery_layer_update_callback(Layer *me, GContext* ctx) {
@@ -221,16 +267,12 @@ void line_layer_update_callback(Layer *me, GContext* ctx) {
   graphics_draw_line(ctx, GPoint(8, 31), GPoint(131, 31));
 }
 
-void request_update() {
-    sendCommandInt(SM_SCREEN_ENTER_KEY, STATUS_SCREEN_APP);
-}
-
 void reset() {
     layer_set_hidden(&text_weather_temp_layer.layer, true);
     layer_set_hidden(&text_weather_cond_layer.layer, false);
     text_layer_set_text(&text_weather_cond_layer, "Updating...");
 
-    request_update();
+    sendCommandInt(SM_SCREEN_ENTER_KEY, STATUS_SCREEN_APP);
 }
 
 void handle_init(AppContextRef ctx) {
@@ -340,9 +382,6 @@ void handle_init(AppContextRef ctx) {
     layer_add_child(&calendar_layer, &calendar_text_layer.layer);
     text_layer_set_text(&calendar_text_layer, "Appointment");
 
-    //app_timer_cancel_event(g_app_context, timer);
-    timer= app_timer_send_event(g_app_context, 180000 /* milliseconds */, 1);
-
     reset();
 }
 
@@ -380,8 +419,18 @@ void handle_deinit(AppContextRef ctx) {
 
 void handle_timer(AppContextRef ctx, AppTimerHandle handle, uint32_t cookie) {
     /* Request new data from the phone once the timers expire */
-
-    request_update();
+    switch (cookie) {
+        case 1:
+            sendCommand(SM_STATUS_UPD_WEATHER_KEY);
+            break;
+        case 2:
+            sendCommand(SM_STATUS_UPD_CAL_KEY);
+            break;
+        case 3:
+            app_timer_cancel_event(g_app_context, timerRetry);
+            sendCommandInt(SM_SCREEN_ENTER_KEY, STATUS_SCREEN_APP);
+            break;
+    }
 }
 
 void pbl_main(void *params) {
@@ -395,7 +444,8 @@ void pbl_main(void *params) {
         },
         .default_callbacks.callbacks = {
             .in_received = rcv,
-            .in_dropped = dropped
+            .in_dropped = dropped,
+            .out_failed = failed
         }
     },
     .tick_info = {
