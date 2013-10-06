@@ -10,7 +10,7 @@ PBL_APP_INFO(MY_UUID,
              "SmartFace", "John Flanagan",
              1, 0, /* App version */
              RESOURCE_ID_APP_ICON,
-             APP_INFO_WATCH_FACE);
+             APP_INFO_STANDARD_APP);
 
 #define STRING_LENGTH 255
 #define NUM_WEATHER_IMAGES  8
@@ -23,6 +23,12 @@ void sendCommandInt(int key, int param);
 void rcv(DictionaryIterator *received, void *context);
 void failed(DictionaryIterator *failed, AppMessageResult reason, void *context);
 void dropped(void *context, AppMessageResult reason);
+void select_up_handler(ClickRecognizerRef recognizer, Window *window);
+void select_down_handler(ClickRecognizerRef recognizer, Window *window);
+void up_single_click_handler(ClickRecognizerRef recognizer, Window *window);
+void down_single_click_handler(ClickRecognizerRef recognizer, Window *window);
+//void select_double_click_handler(ClickRecognizerRef recognizer, Window *window);
+void config_provider(ClickConfig **config, Window *window);
 void battery_layer_update_callback(Layer *me, GContext* ctx);
 void handle_init(AppContextRef ctx);
 void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t);
@@ -225,9 +231,9 @@ void failed(DictionaryIterator *failed, AppMessageResult reason, void *context) 
     get_time(&time);
 
     if (clock_is_24h_style()) {
-      time_format = "%m/%d %H:%M";
+      time_format = "%d/%m %H:%M";
     } else {
-      time_format = "%m/%d %I:%M%p";
+      time_format = "%d/%m %I:%M%p";
     }
 
     string_format_time(time_text, sizeof(time_text), time_format, &time);
@@ -245,6 +251,87 @@ void failed(DictionaryIterator *failed, AppMessageResult reason, void *context) 
 
 void dropped(void *context, AppMessageResult reason){
      // DO SOMETHING WITH THE DROPPED REASON / DISPLAY AN ERROR / RESEND
+}
+
+void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
+(void)recognizer;
+(void)window;
+
+sendCommand(SM_PLAYPAUSE_KEY);	
+
+}
+
+void select_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
+(void)recognizer;
+(void)window;
+
+	reset();
+	sendCommandInt(SM_SCREEN_ENTER_KEY, STATUS_SCREEN_APP);	
+
+}
+
+//void select_double_click_handler(ClickRecognizerRef recognizer, Window *window) {
+//(void)recognizer;
+//(void)window;
+	
+	//reset();
+	//sendCommandInt(SM_SCREEN_ENTER_KEY, STATUS_SCREEN_APP);
+
+//}
+
+void up_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
+(void)recognizer;
+(void)window;
+
+sendCommand(SM_VOLUME_UP_KEY);
+
+}
+
+void up_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
+(void)recognizer;
+(void)window;
+
+sendCommand(SM_PREVIOUS_TRACK_KEY);	
+
+}
+
+
+void down_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
+(void)recognizer;
+(void)window;
+
+sendCommand(SM_VOLUME_DOWN_KEY);
+
+}
+
+void down_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
+(void)recognizer;
+(void)window;
+
+sendCommand(SM_NEXT_TRACK_KEY);
+
+}
+
+
+void config_provider(ClickConfig **config, Window *window) {
+(void)window;
+
+
+config[BUTTON_ID_SELECT]->click.handler = (ClickHandler) select_single_click_handler;
+config[BUTTON_ID_SELECT]->long_click.handler = (ClickHandler) select_long_click_handler;
+//config[BUTTON_ID_SELECT]->multi_click.handler = (ClickHandler) select_double_click_handler;
+	//config[BUTTON_ID_SELECT]->multi_click.min=2;
+	//config[BUTTON_ID_SELECT]->multi_click.max=2;
+	//config[BUTTON_ID_SELECT]->multi_click.last_click_only = false;
+	
+config[BUTTON_ID_UP]->click.handler = (ClickHandler) up_single_click_handler;
+//config[BUTTON_ID_UP]->click.repeat_interval_ms = 100;
+config[BUTTON_ID_UP]->long_click.handler = (ClickHandler) up_long_click_handler;
+
+config[BUTTON_ID_DOWN]->click.handler = (ClickHandler) down_single_click_handler;
+//config[BUTTON_ID_DOWN]->click.repeat_interval_ms = 100;
+config[BUTTON_ID_DOWN]->long_click.handler = (ClickHandler) down_long_click_handler;
+
 }
 
 void battery_layer_update_callback(Layer *me, GContext* ctx) {
@@ -280,6 +367,7 @@ void handle_init(AppContextRef ctx) {
 
     window_init(&window, "Window Name");
     window_stack_push(&window, true /* Animated */);
+	window_set_fullscreen(&window, true);
     window_set_background_color(&window, GColorBlack);
 
     resource_init_current_app(&APP_RESOURCES);
@@ -381,7 +469,9 @@ void handle_init(AppContextRef ctx) {
     text_layer_set_font(&calendar_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     layer_add_child(&calendar_layer, &calendar_text_layer.layer);
     text_layer_set_text(&calendar_text_layer, "Appointment");
-
+    
+	window_set_click_config_provider(&window, (ClickConfigProvider) config_provider);
+	
     reset();
 }
 
