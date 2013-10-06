@@ -10,5 +10,15 @@ This code provides an example of how to communicate with Smartwatch+ and how to 
 * Current weather
 * iPhone battery percentage
 * Next calendar appointment
+* Media Control:
+
+                * Click up = volume up
+                * Hold up = previous track
+                
+                * Click select = update weather and calendar
+                * Hold select = play/pause
+                
+                * Click down = volume down
+                * Hold down = next track
 
 ![SmartStatus watchapp](https://raw.github.com/tallerthenyou/SmartStatus-AppStore/simplicity/SmartStatus.jpg)
